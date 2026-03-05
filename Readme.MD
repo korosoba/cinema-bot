@@ -1,81 +1,94 @@
 # 🎬 Cinema News Bot
 
-Telegram bot that monitors top English cinema news sources and sends hot breaking news using AI filtering.
+Мониторит топовые англоязычные источники о кино и присылает горячие новости в Telegram через AI-фильтрацию.
 
-## Sources
-- Deadline
-- Variety  
-- The Hollywood Reporter
-- Collider
-- IndieWire
-- Screen Rant
+**Запускается через GitHub Actions — бесплатно, без сервера.**
 
-## How it works
-1. Every N hours fetches latest articles from RSS feeds
-2. Filters out already-sent articles (SQLite)
-3. Claude AI scores each article 0–10 for importance
-4. Articles scoring ≥ threshold are sent to your Telegram chat
+## Источники
+Deadline · Variety · Hollywood Reporter · Collider · IndieWire · Screen Rant
 
 ---
 
-## Setup
+## Установка — пошагово
 
-### 1. Get your tokens
+### 1. Создай Telegram бота
 
-**Telegram Bot Token:**
-1. Open [@BotFather](https://t.me/BotFather) in Telegram
-2. Send `/newbot`, follow instructions
-3. Copy the token
+1. Напиши [@BotFather](https://t.me/BotFather) → `/newbot`
+2. Придумай имя и username боту
+3. Скопируй **токен** (вида `123456:ABC-DEF...`)
 
-**Telegram Chat ID:**
-- For a personal chat: message [@userinfobot](https://t.me/userinfobot)
-- For a channel: add your bot as admin, then send a message and check:
-  `https://api.telegram.org/bot<TOKEN>/getUpdates`
+**Узнай Chat ID:**
+- Личный чат: напиши [@userinfobot](https://t.me/userinfobot)
+- Канал: добавь бота как администратора, отправь любое сообщение в канал, затем открой:
+  `https://api.telegram.org/bot<TOKEN>/getUpdates` — найди `"chat":{"id": ...}`
 
-**Anthropic API Key:**
-- Go to [console.anthropic.com](https://console.anthropic.com)
-- Create an API key
+---
 
-### 2. Configure environment
+### 2. Создай GitHub Gist
+
+1. Зайди на [gist.github.com](https://gist.github.com)
+2. Создай новый **secret gist**
+3. Имя файла: `sent_articles.json`
+4. Содержимое: `{"urls": []}`
+5. Скопируй **ID гиста** из URL: `gist.github.com/username/`**`ЭТО_И_ЕСТЬ_ID`**
+
+---
+
+### 3. Создай GitHub Personal Access Token для Gist
+
+1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Generate new token → отметь только scope **`gist`**
+3. Скопируй токен
+
+---
+
+### 4. Добавь секреты в репозиторий
+
+GitHub репо → Settings → Secrets and variables → Actions → **New repository secret**
+
+| Secret | Значение |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | токен от BotFather |
+| `TELEGRAM_CHAT_ID` | ID чата или канала |
+| `GEMINI_API_KEY` | ключ с aistudio.google.com |
+| `GIST_TOKEN` | Personal Access Token с доступом к gist |
+| `GIST_ID` | ID твоего гиста |
+
+---
+
+### 5. Залей код на GitHub и активируй Actions
 
 ```bash
-cp .env.example .env
-# Edit .env with your values
+git init
+git add .
+git commit -m "cinema news bot"
+git branch -M main
+git remote add origin https://github.com/твой/репо.git
+git push -u origin main
 ```
 
-### 3. Run locally
+После пуша зайди в **Actions** → выбери workflow → **Run workflow** для первого теста.
 
-```bash
-pip install -r requirements.txt
-python bot.py
+---
+
+## Настройка
+
+В файле `.github/workflows/news_bot.yml` можно изменить:
+
+```yaml
+cron: "0 */3 * * *"   # каждые 3 часа. Каждые 6ч: "0 */6 * * *"
+HOT_THRESHOLD: "6"    # порог важности 0-10. Выше = строже фильтр
 ```
 
 ---
 
-## Deploy to Render
+## Формат сообщения в Telegram
 
-1. Push this repo to GitHub
-2. Go to [render.com](https://render.com) → New → Blueprint
-3. Connect your GitHub repo
-4. Render will detect `render.yaml` automatically
-5. Add your environment variables in Render dashboard:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
-   - `ANTHROPIC_API_KEY`
-6. Deploy!
+```
+🏆 Cate Blanchett to Star in New Guillermo del Toro Film
 
-> **Note:** Use Render's **Worker** service type (not Web Service) — the bot doesn't need HTTP.
+📰 Deadline  ⭐⭐⭐⭐
+💡 Крупный кастинг ожидаемого авторского проекта
 
----
-
-## Configuration
-
-| Variable | Default | Description |
-|---|---|---|
-| `CHECK_INTERVAL_HOURS` | `3` | How often to check news |
-| `HOT_THRESHOLD` | `6` | Min AI score (0–10) to send |
-
-Tune `HOT_THRESHOLD`:
-- `5` — more news, including medium stories
-- `6` — balanced (recommended)
-- `8` — only truly breaking news
+Читать полностью →
+```
