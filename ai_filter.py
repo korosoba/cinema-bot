@@ -1,79 +1,63 @@
 import os
 import json
 import logging
-import anthropic
-from rss_parser import Article
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
-# Minimum score to consider a news item "hot" (0-10)
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
+GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    f"gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+)
 
-SYSTEM_PROMPT = """You are an expert cinema news editor for a popular Telegram channel about movies.
-Your job is to evaluate whether a news article is "hot" or important enough to notify subscribers.
+SYSTEM_PROMPT = """You are a cinema news editor for a Telegram channel.
+Evaluate if a news article is important/breaking enough to notify subscribers.
 
-Rate the article on a scale from 0 to 10 based on:
-- Breaking news about major films or franchises (Marvel, DC, Star Wars, etc.) → high score
-- Oscar news, major awards, box office records → high score  
-- Big casting announcements, director changes → high score
-- Trailer releases for anticipated films → high score
-- Festival premieres (Cannes, Venice, Sundance) → medium-high score
-- Minor interviews, listicles, opinion pieces → low score
-- Clickbait or non-essential content → very low score
+Score 0–10:
+- 8-10: Truly breaking — major casting, Oscar winners, record box office, franchise announcements
+- 6-7: Notable — trailer drops, festival buzz, director announcements, sequels confirmed
+- 3-5: Routine — interviews, reviews, minor updates
+- 0-2: Filler — listicles, opinion pieces, clickbait
 
-Respond ONLY with a valid JSON object, no markdown, no extra text:
-{"score": <0-10>, "reason": "<one sentence why>", "emoji": "<one relevant emoji>"}"""
+Reply ONLY with valid JSON, no markdown, no extra text:
+{"score": <0-10>, "reason": "<one sentence in Russian>", "emoji": "<one emoji>"}"""
 
 
-def evaluate_article(article: Article) -> tuple[int, str, str]:
-    """
-    Use Claude to evaluate if an article is hot news.
-    Returns (score, reason, emoji).
-    """
+def evaluate_article(article) -> tuple[int, str, str]:
+    prompt = f"{SYSTEM_PROMPT}\n\nSource: {article.source}\nTitle: {article.title}\nSummary: {article.summary[:300]}"
+    body = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": 150, "temperature": 0.2},
+    }).encode()
+
     try:
-        prompt = f"""Source: {article.source}
-Title: {article.title}
-Summary: {article.summary[:300]}
-
-Rate this cinema news article."""
-
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=150,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
+        req = urllib.request.Request(
+            GEMINI_URL,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read())
 
-        raw = message.content[0].text.strip()
-        data = json.loads(raw)
-
-        score = int(data.get("score", 0))
-        reason = data.get("reason", "")
-        emoji = data.get("emoji", "🎬")
-
-        return score, reason, emoji
+        raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        # Strip markdown fences if Gemini adds them
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        result = json.loads(raw)
+        return int(result.get("score", 0)), result.get("reason", ""), result.get("emoji", "🎬")
 
     except Exception as e:
-        logger.error(f"AI evaluation failed for '{article.title}': {e}")
-        return 0, "Evaluation failed", "🎬"
+        logger.error(f"Gemini eval failed for '{article.title[:50]}': {e}")
+        return 0, "", "🎬"
 
 
-def filter_hot_articles(articles: list[Article]) -> list[tuple[Article, int, str, str]]:
-    """
-    Filter articles by AI score. Returns list of (article, score, reason, emoji)
-    sorted by score descending.
-    """
+def filter_hot_articles(articles) -> list[tuple]:
     results = []
-
     for article in articles:
         score, reason, emoji = evaluate_article(article)
-        logger.info(f"Score {score}/10 | {article.source} | {article.title[:60]}")
-
+        logger.info(f"[{score}/10] {article.source} | {article.title[:60]}")
         if score >= HOT_THRESHOLD:
             results.append((article, score, reason, emoji))
-
-    # Sort by score descending
-    results.sort(key=lambda x: x[1], reverse=True)
-    return results
+    return sorted(results, key=lambda x: x[1], reverse=True)
