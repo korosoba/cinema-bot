@@ -9,7 +9,7 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    f"gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 )
 
 SYSTEM_PROMPT = """You are a cinema news editor for a Telegram channel.
