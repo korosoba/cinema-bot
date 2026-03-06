@@ -22,6 +22,12 @@ jobs:
       - name: Debug - show file structure
         run: find . -type f -name "*.py" | head -20
 
+      - name: Fix filename if needed
+        run: |
+          if [ -f "Gist storage.py" ]; then
+            mv "Gist storage.py" gist_storage.py
+          fi
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
