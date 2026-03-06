@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Debug - show file structure
+        run: find . -type f -name "*.py" | head -20
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
