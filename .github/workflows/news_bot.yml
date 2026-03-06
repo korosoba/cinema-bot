@@ -21,6 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+        working-directory: cinema-bot
 
       - name: Run bot
         env:
@@ -31,3 +32,4 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}
           HOT_THRESHOLD: "6"
         run: python main.py
+        working-directory: cinema-bot
