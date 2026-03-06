@@ -5,12 +5,9 @@ import urllib.request
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-)
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = """You are a cinema news editor for a Telegram channel.
 You will receive a numbered list of news article titles and sources.
@@ -29,34 +26,39 @@ def filter_hot_articles(articles) -> list[tuple]:
     if not articles:
         return []
 
-    # Build numbered list for a single batch prompt
-    lines = []
-    for i, a in enumerate(articles, 1):
-        lines.append(f"{i}. [{a.source}] {a.title}")
-    prompt = SYSTEM_PROMPT + "\n\n" + "\n".join(lines)
+    lines = [f"{i}. [{a.source}] {a.title}" for i, a in enumerate(articles, 1)]
+    user_prompt = "\n".join(lines)
 
     body = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.2},
+        "model": "llama-3.3-70b-versatile",
+        "temperature": 0.2,
+        "max_tokens": 4096,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
     }).encode()
 
     try:
         req = urllib.request.Request(
-            GEMINI_URL,
+            GROQ_URL,
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
 
-        raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        raw = data["choices"][0]["message"]["content"].strip()
         raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         scores = json.loads(raw)
         score_map = {item["id"]: item for item in scores}
 
     except Exception as e:
-        logger.error(f"Gemini batch eval failed: {e}")
+        logger.error(f"Groq batch eval failed: {e}")
         return []
 
     results = []
