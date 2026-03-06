@@ -19,9 +19,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Debug - show file structure
-        run: find . -type f -name "*.py" | head -20
-
+      - name: Check secrets
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "❌ GROQ_API_KEY is not set!"
+          else
+            echo "✅ GROQ_API_KEY is set"
+          fi
+    
       - name: Fix filename if needed
         run: |
           if [ -f "Gist storage.py" ]; then
