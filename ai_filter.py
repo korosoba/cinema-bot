@@ -1,74 +1,42 @@
-import os
-import json
-import logging
-import urllib.request
+name: Cinema News Bot
 
-logger = logging.getLogger(__name__)
+on:
+  schedule:
+    # Runs every 3 hours
+    - cron: "0 */3 * * *"
+  workflow_dispatch:  # allows manual run from GitHub UI
 
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
-HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+jobs:
+  check-news:
+    runs-on: ubuntu-latest
 
-SYSTEM_PROMPT = """You are a cinema news editor for a Telegram channel.
-You will receive a numbered list of news article titles and sources.
-Score each one from 0-10 based on importance:
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-- 8-10: Truly breaking - major casting, Oscar winners, record box office, franchise announcements
-- 6-7: Notable - trailer drops, festival buzz, director announcements, sequels confirmed
-- 3-5: Routine - interviews, reviews, minor updates
-- 0-2: Filler - listicles, opinion pieces, clickbait
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-Reply ONLY with a valid JSON array, one object per article, no markdown, no extra text:
-[{"id": 1, "score": 8, "reason": "одно предложение на русском", "emoji": "🎬"}, ...]"""
+      - name: Debug - show file structure
+        run: find . -type f -name "*.py" | head -20
 
+      - name: Fix filename if needed
+        run: |
+          if [ -f "Gist storage.py" ]; then
+            mv "Gist storage.py" gist_storage.py
+          fi
 
-def filter_hot_articles(articles) -> list[tuple]:
-    if not articles:
-        return []
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-    lines = [f"{i}. [{a.source}] {a.title}" for i, a in enumerate(articles, 1)]
-    user_prompt = "\n".join(lines)
-
-    body = json.dumps({
-        "model": "llama-3.3-70b-versatile",
-        "temperature": 0.2,
-        "max_tokens": 4096,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-    }).encode()
-
-    try:
-        req = urllib.request.Request(
-            GROQ_URL,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read())
-
-        raw = data["choices"][0]["message"]["content"].strip()
-        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        scores = json.loads(raw)
-        score_map = {item["id"]: item for item in scores}
-
-    except Exception as e:
-        logger.error(f"Groq batch eval failed: {e}")
-        return []
-
-    results = []
-    for i, article in enumerate(articles, 1):
-        item = score_map.get(i, {})
-        score = int(item.get("score", 0))
-        reason = item.get("reason", "")
-        emoji = item.get("emoji", "🎬")
-        logger.info(f"[{score}/10] {article.source} | {article.title[:60]}")
-        if score >= HOT_THRESHOLD:
-            results.append((article, score, reason, emoji))
-
-    return sorted(results, key=lambda x: x[1], reverse=True)
+      - name: Run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          HOT_THRESHOLD: "6"
+        run: python main.py
