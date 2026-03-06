@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import time
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,8 @@ def evaluate_article(article) -> tuple[int, str, str]:
         )
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read())
+
+        time.sleep(5)  # max 15 req/min on free tier → 1 req per 4s, we use 5s to be safe
 
         raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         # Strip markdown fences if Gemini adds them
