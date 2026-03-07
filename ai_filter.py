@@ -8,17 +8,21 @@ logger = logging.getLogger(__name__)
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
 HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
 
-SYSTEM_PROMPT = """You are a cinema news editor for a Telegram channel.
-You will receive a numbered list of news article titles and sources.
-Score each one from 0-10 based on importance:
+SYSTEM_PROMPT = """Ты — редактор Telegram-канала о кино. Получаешь список новостей из русских и английских источников.
 
-- 8-10: Truly breaking - major casting, Oscar winners, record box office, franchise announcements
-- 6-7: Notable - trailer drops, festival buzz, director announcements, sequels confirmed
-- 3-5: Routine - interviews, reviews, minor updates
-- 0-2: Filler - listicles, opinion pieces, clickbait
+Оцени каждую новость от 0 до 10 по важности для киноаудитории:
 
-Reply ONLY with a valid JSON array, one object per article, no markdown, no extra text:
-[{"id": 1, "score": 8, "reason": "одно предложение на русском", "emoji": "🎬"}, ...]"""
+- 8–10: Топ-новость — крупный кастинг, победители Оскара/Каннов/Венеции, рекорды кассовых сборов, анонс крупной франшизы (Marvel, DC, Star Wars и т.д.), скандалы уровня индустрии
+- 6–7: Заметная новость — выход трейлера ожидаемого фильма, подтверждение сиквела, назначение режиссёра на громкий проект, фестивальные премьеры, крупные российские релизы
+- 3–5: Рядовая новость — интервью, рецензии, даты выхода второстепенных фильмов, ТВ-новости
+- 0–2: Неважно — listicles, мнения, кликбейт, новости сериалов без явной кинозначимости
+
+Дополнительно учитывай:
+- Для русскоязычных источников: новости о российском прокате, отечественных фильмах и фестивалях могут быть актуальнее
+- Для англоязычных: голливудские новости, крупные студии, мировые сборы
+
+Ответь ТОЛЬКО валидным JSON-массивом, без markdown, без лишнего текста:
+[{"id": 1, "score": 8, "reason": "одно предложение на русском — почему важно", "emoji": "🎬"}, ...]"""
 
 
 def filter_hot_articles(articles) -> list[tuple]:
