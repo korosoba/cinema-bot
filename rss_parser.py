@@ -7,12 +7,18 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 RSS_FEEDS = {
+    # --- English sources ---
     "Deadline":             "https://deadline.com/feed/",
     "Variety":              "https://variety.com/feed/",
     "Hollywood Reporter":   "https://www.hollywoodreporter.com/feed/",
     "Collider":             "https://collider.com/feed/",
     "IndieWire":            "https://www.indiewire.com/feed/",
     "Screen Rant":          "https://screenrant.com/feed/",
+    # --- Russian sources ---
+    "КиноНьюс":             "https://www.kinonews.ru/rss.xml",
+    "Film.ru":              "https://www.film.ru/rss",
+    "КиноПоиск":            "https://www.kinopoisk.ru/news.rss",
+    "Кино Mail.ru":         "https://kino.mail.ru/rss/news/",
 }
 
 
