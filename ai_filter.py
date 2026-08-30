@@ -34,7 +34,7 @@ def filter_hot_articles(articles) -> list[tuple]:
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="qwen/qwen3.6-27b",
             temperature=0.2,
             max_tokens=4096,
             messages=[
