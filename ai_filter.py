@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
+BATCH_SIZE = 20  # статей за один запрос
 
 SYSTEM_PROMPT = """Ты — редактор Telegram-канала о кино. Получаешь список новостей из русских и английских источников.
 
@@ -17,25 +18,19 @@ SYSTEM_PROMPT = """Ты — редактор Telegram-канала о кино. 
 - 3–5: Рядовая новость — интервью, рецензии, даты выхода второстепенных фильмов, ТВ-новости
 - 0–2: Неважно — listicles, мнения, кликбейт, новости сериалов без явной кинозначимости
 
-Дополнительно учитывай:
-- Для русскоязычных источников: новости о российском прокате, отечественных фильмах и фестивалях могут быть актуальнее
-- Для англоязычных: голливудские новости, крупные студии, мировые сборы
-
 Ответь ТОЛЬКО валидным JSON-массивом, без markdown, без лишнего текста:
 [{"id": 1, "score": 8, "reason": "одно предложение на русском — почему важно", "emoji": "🎬"}, ...]"""
 
 
-def filter_hot_articles(articles) -> list[tuple]:
-    if not articles:
-        return []
-
-    lines = [f"{i}. [{a.source}] {a.title}" for i, a in enumerate(articles, 1)]
-    user_prompt = "\n".join(lines)
+def call_groq(lines: list[str], id_offset: int) -> list[dict]:
+    """Отправляет батч статей в Groq и возвращает список оценок."""
+    numbered = [f"{id_offset + i}. {line}" for i, line in enumerate(lines)]
+    user_prompt = "\n".join(numbered)
 
     payload = json.dumps({
         "model": "qwen/qwen3.6-27b",
         "temperature": 0.2,
-        "max_tokens": 4096,
+        "max_tokens": 8192,
         "reasoning_effort": "none",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -53,32 +48,38 @@ def filter_hot_articles(articles) -> list[tuple]:
         },
     )
 
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read())
-            raw = data["choices"][0]["message"]["content"].strip()
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read())
+        raw = data["choices"][0]["message"]["content"].strip()
 
-        # Очищаем markdown-обёртку если есть
-        if "```" in raw:
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        # Ищем JSON-массив в ответе
-        start = raw.find("[")
-        end = raw.rfind("]") + 1
-        if start == -1 or end == 0:
-            logger.error(f"JSON-массив не найден в ответе: {raw[:200]}")
-            return []
-
-        raw = raw[start:end]
-        scores = json.loads(raw)
-        score_map = {item["id"]: item for item in scores}
-
-    except Exception as e:
-        logger.error(f"Groq eval failed: {e}")
+    # Ищем JSON-массив
+    start = raw.find("[")
+    end = raw.rfind("]") + 1
+    if start == -1 or end == 0:
+        logger.error(f"JSON-массив не найден: {raw[:200]}")
         return []
+
+    return json.loads(raw[start:end])
+
+
+def filter_hot_articles(articles) -> list[tuple]:
+    if not articles:
+        return []
+
+    score_map = {}
+    lines = [f"[{a.source}] {a.title}" for a in articles]
+
+    # Обрабатываем батчами
+    for batch_start in range(0, len(lines), BATCH_SIZE):
+        batch = lines[batch_start:batch_start + BATCH_SIZE]
+        id_offset = batch_start + 1
+        try:
+            scores = call_groq(batch, id_offset)
+            for item in scores:
+                score_map[item["id"]] = item
+            logger.info(f"Батч {batch_start//BATCH_SIZE + 1}: оценено {len(scores)} статей")
+        except Exception as e:
+            logger.error(f"Groq eval failed (батч {batch_start//BATCH_SIZE + 1}): {e}")
 
     results = []
     for i, article in enumerate(articles, 1):
