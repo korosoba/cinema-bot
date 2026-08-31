@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 HOT_THRESHOLD = int(os.getenv("HOT_THRESHOLD", "6"))
-BATCH_SIZE = 20  # статей за один запрос
+BATCH_SIZE = 10  # статей за один запрос
 
 SYSTEM_PROMPT = """Ты — редактор Telegram-канала о кино. Получаешь список новостей из русских и английских источников.
 
@@ -30,7 +30,7 @@ def call_groq(lines: list[str], id_offset: int) -> list[dict]:
     payload = json.dumps({
         "model": "qwen/qwen3.6-27b",
         "temperature": 0.2,
-        "max_tokens": 8192,
+        "max_tokens": 2048,
         "reasoning_effort": "none",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
