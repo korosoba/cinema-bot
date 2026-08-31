@@ -2,7 +2,6 @@
 Main entry point for GitHub Actions.
 No scheduler needed — Actions triggers this script on cron.
 """
-
 import os
 import time
 import logging
@@ -22,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+VK_TOKEN = os.getenv("VK_TOKEN", "")
+VK_GROUP_ID = os.getenv("VK_GROUP_ID", "")
 
 
 def send_telegram(text: str):
@@ -37,6 +38,40 @@ def send_telegram(text: str):
         return json.loads(resp.read())
 
 
+def publish_to_vk(article, score: int, reason: str, emoji: str):
+    """Публикует горячую новость отдельным постом в VK-группу."""
+    if not VK_TOKEN or not VK_GROUP_ID:
+        return
+
+    stars = "⭐" * min(score // 2, 5)
+    text = (
+        f"{emoji} {article.title}\n\n"
+        f"📰 {article.source}  {stars}\n"
+        f"💡 {reason}\n\n"
+        f"🔗 {article.url}"
+    )
+
+    try:
+        params = urllib.parse.urlencode({
+            "owner_id": f"-{VK_GROUP_ID}",
+            "message": text[:4096],
+            "access_token": VK_TOKEN,
+            "v": "5.199",
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.vk.com/method/wall.post",
+            data=params
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+            if "error" in result:
+                logger.error(f"VK error: {result['error']}")
+            else:
+                logger.info(f"✅ VK: пост опубликован ({result.get('response', {}).get('post_id')})")
+    except Exception as e:
+        logger.error(f"VK publish failed: {e}")
+
+
 def format_message(article, score: int, reason: str, emoji: str) -> str:
     stars = "⭐" * min(score // 2, 5)
     return (
@@ -50,15 +85,12 @@ def format_message(article, score: int, reason: str, emoji: str) -> str:
 def main():
     logger.info("🚀 Cinema News Bot starting...")
 
-    # Load already-sent URLs from Gist
     sent_urls = load_sent_urls()
     logger.info(f"📂 Loaded {len(sent_urls)} sent URLs from Gist")
 
-    # Fetch all articles
     articles = fetch_articles(max_per_source=15)
     logger.info(f"📦 Fetched {len(articles)} total articles")
 
-    # Filter out duplicates
     new_articles = [a for a in articles if a.url not in sent_urls]
     logger.info(f"🆕 New articles: {len(new_articles)}")
 
@@ -66,11 +98,9 @@ def main():
         logger.info("Nothing new. Exiting.")
         return
 
-    # AI scoring
     hot = filter_hot_articles(new_articles)
     logger.info(f"🔥 Hot articles: {len(hot)}")
 
-    # Send to Telegram
     sent_count = 0
     for article, score, reason, emoji in hot:
         try:
@@ -78,13 +108,15 @@ def main():
             sent_urls.add(article.url)
             sent_count += 1
             logger.info(f"✉️  Sent: {article.title[:70]}")
-            time.sleep(1)  # avoid Telegram rate limit
+
+            # Дублируем в VK
+            publish_to_vk(article, score, reason, emoji)
+
+            time.sleep(1)
         except Exception as e:
             logger.error(f"Failed to send: {e}")
 
     logger.info(f"✅ Done. Sent {sent_count} articles.")
-
-    # Save updated URL list back to Gist
     save_sent_urls(sent_urls)
 
 
